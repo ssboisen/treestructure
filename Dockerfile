@@ -1,7 +1,7 @@
 FROM golang:1.12 as builder
 
 WORKDIR /go/src/app
-COPY ./src .
+COPY . .
 
 RUN go get -d -v ./...
 RUN go install -v ./...
