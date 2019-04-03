@@ -21,21 +21,22 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "GET /nodes/nodePath to get node information. Example: /nodes/a/c or /nodes/ to get root")
-		fmt.Fprintf(w, "POST /nodes/nodePath to create node. Example: /nodes/f/o/o/b/a/r")
+		fmt.Fprintf(w, "POST /nodes/nodePath to create nodes. Example: /nodes/f/o/o/b/a/r")
 		fmt.Fprintf(w, "PUT /nodes/nodePath?newParent=newParentNodePath to change parent node. Example: /nodes/a/c?newParent=b")
 	})
 
 	http.HandleFunc("/nodes/", func(w http.ResponseWriter, r *http.Request) {
 		nodePath := r.URL.Path[6:]
 
-		if r.Method == "GET" {
+		switch r.Method {
+		case "GET":
 			getNodeInfo(w, nodePath)
-		} else if r.Method == "POST" {
+		case "POST":
 			createNode(w, nodePath)
-		} else if r.Method == "PUT" {
+		case "PUT":
 			newParentPath := r.URL.Query().Get("newParent")
 			moveParent(w, nodePath, newParentPath)
-		} else {
+		default:
 			http.NotFound(w, r)
 		}
 	})
@@ -56,34 +57,32 @@ func createNode(w http.ResponseWriter, nodePath string) {
 }
 
 func getNodeInfo(w http.ResponseWriter, nodePath string) {
-	fileInfo, err := ioutil.ReadDir(getStoragePath(nodePath))
+
+	nodeNames, err := getChildren(nodePath)
 
 	if err != nil {
 		log.Println(err)
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "Node not found: %s\n\n", nodePath)
+	} else if len(nodeNames) == 0 {
+		fmt.Fprintf(w, "Node %s has no children\n\n", nodePath)
 	} else {
 
-		if len(fileInfo) == 0 {
-			fmt.Fprintf(w, "Node %s has no children\n\n", nodePath)
-		} else {
+		fmt.Fprintf(w, "Child nodes of %s:\n\n", nodePath)
+		pathParts := getPathParts(nodePath)
 
-			fmt.Fprintf(w, "Child nodes of %s:\n\n", nodePath)
-			for _, file := range fileInfo {
-				if file.IsDir() {
-					pathParts := getPathParts(nodePath)
-					childNode := node{
-						id:     path.Join(nodePath, file.Name()),
-						parent: nodePath,
-						root:   "/",
-						height: len(pathParts) + 1}
+		for _, nodeName := range nodeNames {
+			childNode := node{
+				id:     path.Join(nodePath, nodeName),
+				parent: nodePath,
+				root:   "/",
+				height: len(pathParts) + 1}
 
-					fmt.Fprintf(w, "%+v\n", childNode)
-				}
-			}
-
+			fmt.Fprintf(w, "%+v\n", childNode)
 		}
+
 	}
+
 }
 
 func moveParent(w http.ResponseWriter, nodePath, newParentPath string) {
@@ -103,6 +102,24 @@ func moveParent(w http.ResponseWriter, nodePath, newParentPath string) {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "No new parent given\n\n")
 	}
+}
+
+func getChildren(nodePath string) ([]string, error) {
+	fileInfos, err := ioutil.ReadDir(getStoragePath(nodePath))
+
+	if err != nil {
+		return nil, err
+	}
+
+	var nodeNames []string
+
+	for _, file := range fileInfos {
+		if file.IsDir() {
+			nodeNames = append(nodeNames, file.Name())
+		}
+	}
+
+	return nodeNames, nil
 }
 
 func getPathParts(nodePath string) []string {
